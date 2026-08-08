@@ -1,0 +1,4 @@
+<resources>
+    <!-- Generated from routine.csv by tools/build_routine.py (make routine). -->
+    <jsonData id="routineData" filename="routine.json" />
+</resources>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<iq:manifest version="3" xmlns:iq="http://www.garmin.com/xml/connectiq">
+    <!--
+    Watch-app (only watch-apps may record activities). Target is the Forerunner 255
+    Music only (fr255m); adding more products would force layout tests for the smaller
+    255S (218 px). Permissions are Fit + Sensor only: no Positioning (no GPS search on
+    start) and no Communications (no backend). Min API 4.1.0 = the FR255's launch firmware.
+    -->
+    <iq:application entry="DailyMobilityApp"
+                    id="9ae7c87917254d0ba62d83c5c924beda"
+                    launcherIcon="@Drawables.LauncherIcon"
+                    minApiLevel="4.1.0"
+                    name="@Strings.AppName"
+                    type="watch-app">
+        <iq:products>
+            <iq:product id="fr255m"/>
+        </iq:products>
+        <iq:permissions>
+            <iq:uses-permission id="Fit"/>
+            <iq:uses-permission id="Sensor"/>
+        </iq:permissions>
+        <iq:languages>
+            <iq:language>eng</iq:language>
+        </iq:languages>
+    </iq:application>
+</iq:manifest>
