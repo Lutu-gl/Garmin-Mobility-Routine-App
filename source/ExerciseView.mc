@@ -7,6 +7,10 @@ using Toybox.Attention;
 // The main workout screen. Drives one 1-second timer that counts a time step down
 // (auto-advancing at 0) or counts elapsed seconds up on a rep step. Handles pause,
 // manual navigation and all the drawing described in the spec's screen layout.
+//
+// Layout is computed from measured font heights/widths and stacked top to bottom so
+// nothing overlaps and text stays inside the round display's safe area, regardless of
+// exercise name/description length.
 class ExerciseView extends WatchUi.View {
 
     var mModel;
@@ -132,69 +136,98 @@ class ExerciseView extends WatchUi.View {
         var w = dc.getWidth();
         var h = dc.getHeight();
         var cx = w / 2;
+        var midW = w * 0.66;    // safe text width across the middle of the round screen
+        var edgeW = w * 0.54;   // tighter width near the narrow top/bottom
         var s = mModel.current();
 
-        // Status line: step counter (left) and heart rate (right).
+        // Status row: step counter (left) and heart rate (right).
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
         var status = (mModel.index + 1) + " / " + mModel.count();
-        dc.drawText(w * 0.32, h * 0.15, Graphics.FONT_TINY, status,
+        dc.drawText(w * 0.31, h * 0.15, Graphics.FONT_TINY, status,
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
-        dc.drawText(w * 0.68, h * 0.15, Graphics.FONT_TINY, "♥ " + currentHr(),
+        dc.drawText(w * 0.69, h * 0.15, Graphics.FONT_TINY, "♥ " + currentHr(),
             Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
 
-        // Exercise name, large.
+        // Exercise name: pick the largest font that fits on one line; only wrap to two
+        // lines if even the smallest font is too wide.
+        var nameFont = fitFont(dc, s["n"],
+            [Graphics.FONT_MEDIUM, Graphics.FONT_SMALL, Graphics.FONT_TINY], midW);
+        var nameLines;
+        if (dc.getTextWidthInPixels(s["n"], nameFont) <= midW) {
+            nameLines = [s["n"]];
+        } else {
+            nameLines = wrapLines(dc, s["n"], nameFont, midW, 2);
+        }
+        var nameLh = dc.getFontHeight(nameFont);
+        var nameTop = h * 0.21;
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, h * 0.29, Graphics.FONT_MEDIUM, s["n"],
-            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        for (var i = 0; i < nameLines.size(); i += 1) {
+            dc.drawText(cx, nameTop + i * nameLh, nameFont, nameLines[i],
+                Graphics.TEXT_JUSTIFY_CENTER);
+        }
+        var nameBottom = nameTop + nameLines.size() * nameLh;
 
-        // Description, wrapped to at most 3 lines with an ellipsis on overflow.
+        // Description: up to two lines, but only one when the name already used two, so
+        // the countdown below always has room.
+        var descMax = (nameLines.size() >= 2) ? 1 : 2;
+        var descLines = wrapLines(dc, s["d"], Graphics.FONT_XTINY, midW, descMax);
+        var descLh = dc.getFontHeight(Graphics.FONT_XTINY);
+        var descTop = nameBottom + 6;
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        drawWrapped(dc, cx, h * 0.40, s["d"], Graphics.FONT_XTINY, w * 0.68, 3);
+        for (var i = 0; i < descLines.size(); i += 1) {
+            dc.drawText(cx, descTop + i * descLh, Graphics.FONT_XTINY, descLines[i],
+                Graphics.TEXT_JUSTIFY_CENTER);
+        }
+        var descBottom = descTop + descLines.size() * descLh;
 
-        // Central value: countdown or rep target.
-        drawCentral(dc, cx, h * 0.63, s);
-
-        // Overall routine progress bar.
-        var prog = routineProgress();
+        // Progress bar near the bottom; the big value is centred in the gap above it.
         var barW = (w * 0.60).toNumber();
         var barH = 6;
         var barX = cx - barW / 2;
-        var barY = (h * 0.80).toNumber();
+        var barY = (h * 0.82).toNumber();
+
+        drawCentral(dc, cx, (descBottom + barY) / 2, barY - descBottom, s);
+
+        var prog = routineProgress();
         dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
         dc.fillRectangle(barX, barY, barW, barH);
         dc.setColor(Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
         dc.fillRectangle(barX, barY, (barW * prog).toNumber(), barH);
 
-        // Next-exercise preview.
-        var nxt = mModel.peekNext();
-        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        if (nxt != null) {
-            dc.drawText(cx, h * 0.87, Graphics.FONT_XTINY, "next: " + nxt["n"],
-                Graphics.TEXT_JUSTIFY_CENTER);
+        // Bottom line: PAUSE while paused, otherwise the next-exercise preview.
+        var infoY = h * 0.90;
+        if (mPaused) {
+            dc.setColor(Graphics.COLOR_ORANGE, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, infoY, Graphics.FONT_XTINY, "PAUSE",
+                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
         } else {
-            dc.drawText(cx, h * 0.87, Graphics.FONT_XTINY, "last exercise",
-                Graphics.TEXT_JUSTIFY_CENTER);
+            dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+            var nxt = mModel.peekNext();
+            var label = (nxt != null) ? "next: " + nxt["n"] : "last exercise";
+            if (dc.getTextWidthInPixels(label, Graphics.FONT_XTINY) > edgeW) {
+                label = truncate(dc, label, Graphics.FONT_XTINY, edgeW);
+            }
+            dc.drawText(cx, infoY, Graphics.FONT_XTINY, label,
+                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
         }
     }
 
-    function drawCentral(dc, cx, y, s) {
+    // Draws the countdown (time) or rep target, using the biggest numeric font that fits
+    // the available vertical band so it never collides with the bar or the description.
+    function drawCentral(dc, cx, y, bandH, s) {
+        var numFont = (bandH >= dc.getFontHeight(Graphics.FONT_NUMBER_HOT))
+            ? Graphics.FONT_NUMBER_HOT : Graphics.FONT_NUMBER_MEDIUM;
         if (s["t"] == 0) {
             var color = mPaused ? Graphics.COLOR_ORANGE : Graphics.COLOR_WHITE;
             dc.setColor(color, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, y, Graphics.FONT_NUMBER_HOT, fmtTime(mRemaining),
+            dc.drawText(cx, y, numFont, fmtTime(mRemaining),
                 Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
-            if (mPaused) {
-                dc.drawText(cx, y + dc.getFontHeight(Graphics.FONT_NUMBER_HOT) / 2,
-                    Graphics.FONT_XTINY, "‖ PAUSED",
-                    Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
-            }
         } else {
             // Numeric font has no "x" glyph, so draw the count and " x" separately.
             dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
             var numStr = s["v"].toString();
-            var numFont = Graphics.FONT_NUMBER_HOT;
             var timesStr = " ×";
-            var timesFont = Graphics.FONT_MEDIUM;
+            var timesFont = Graphics.FONT_SMALL;
             var numW = dc.getTextWidthInPixels(numStr, numFont);
             var timesW = dc.getTextWidthInPixels(timesStr, timesFont);
             var startX = cx - (numW + timesW) / 2;
@@ -229,14 +262,16 @@ class ExerciseView extends WatchUi.View {
         return m + ":" + (sec < 10 ? "0" + sec : "" + sec);
     }
 
-    // --- word wrapping ---
+    // --- text fitting helpers ---
 
-    function drawWrapped(dc, cx, y, text, font, maxWidth, maxLines) {
-        var lines = wrapLines(dc, text, font, maxWidth, maxLines);
-        var lh = dc.getFontHeight(font);
-        for (var i = 0; i < lines.size(); i += 1) {
-            dc.drawText(cx, y + i * lh, font, lines[i], Graphics.TEXT_JUSTIFY_CENTER);
+    // Largest font whose single-line width fits maxWidth, else the smallest given.
+    function fitFont(dc, text, fonts, maxWidth) {
+        for (var i = 0; i < fonts.size(); i += 1) {
+            if (dc.getTextWidthInPixels(text, fonts[i]) <= maxWidth) {
+                return fonts[i];
+            }
         }
+        return fonts[fonts.size() - 1];
     }
 
     function wrapLines(dc, text, font, maxWidth, maxLines) {
