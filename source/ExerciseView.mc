@@ -4,14 +4,17 @@ using Toybox.Timer;
 using Toybox.Activity;
 using Toybox.Attention;
 
-// The main workout screen. Drives one 1-second timer that counts a time step down
-// (auto-advancing at 0) or counts elapsed seconds up on a rep step. Handles pause,
-// manual navigation and all the drawing described in the spec's screen layout.
-//
-// Layout is computed from measured font heights/widths and stacked top to bottom so
-// nothing overlaps and text stays inside the round display's safe area, regardless of
-// exercise name/description length.
+// The main workout screen. One 100 ms timer drives everything: the 1-second countdown
+// logic (derived by counting ticks) and the smooth horizontal scrolling of any line that
+// is too long to fit. A time step counts down and auto-advances at 0; a rep step counts
+// elapsed seconds up. Layout is measured and stacked top to bottom so nothing overlaps or
+// runs off the round display.
 class ExerciseView extends WatchUi.View {
+
+    const TICK_MS = 100;        // timer period
+    const SECOND_TICKS = 10;    // 10 ticks == 1 second
+    const SCROLL_SPEED = 3;     // pixels advanced per tick for the marquee
+    const SCROLL_GAP = 34;      // gap between the end and the wrapped-around start
 
     var mModel;
     var mTimer;
@@ -19,6 +22,9 @@ class ExerciseView extends WatchUi.View {
     var mStepElapsed;   // seconds elapsed on the current step (rep up-counter)
     var mPaused;
     var mFinished;
+    var mTicks;         // total timer ticks since the current step started
+    var mScrollPx;      // accumulated marquee offset in pixels
+    var mNeedsScroll;   // true when some visible line is being scrolled
 
     function initialize(model) {
         View.initialize();
@@ -34,6 +40,9 @@ class ExerciseView extends WatchUi.View {
         var s = mModel.current();
         mPaused = false;
         mStepElapsed = 0;
+        mTicks = 0;
+        mScrollPx = 0;
+        mNeedsScroll = false;
         mRemaining = (s["t"] == 0) ? s["v"] : 0;
         buzz(300);   // short vibration on every step change
     }
@@ -42,7 +51,7 @@ class ExerciseView extends WatchUi.View {
     function onShow() {
         if (!mFinished && mTimer == null) {
             mTimer = new Timer.Timer();
-            mTimer.start(method(:onTick), 1000, true);
+            mTimer.start(method(:onTick), TICK_MS, true);
         }
     }
 
@@ -58,17 +67,29 @@ class ExerciseView extends WatchUi.View {
     }
 
     function onTick() as Void {
-        if (mPaused || mFinished) { return; }
-        var s = mModel.current();
-        if (s["t"] == 0) {
-            mRemaining -= 1;
-            mStepElapsed += 1;
-            if (mRemaining > 0 && mRemaining <= 3) { tick(); }
-            if (mRemaining <= 0) { advance(); return; }
-        } else {
-            mStepElapsed += 1;   // up-counter, no auto-advance on rep steps
+        if (mFinished) { return; }
+        mTicks += 1;
+        var secondBoundary = (mTicks % SECOND_TICKS == 0);
+
+        if (secondBoundary && !mPaused) {
+            var s = mModel.current();
+            if (s["t"] == 0) {
+                mRemaining -= 1;
+                mStepElapsed += 1;
+                if (mRemaining > 0 && mRemaining <= 3) { tick(); }
+                if (mRemaining <= 0) { advance(); return; }
+            } else {
+                mStepElapsed += 1;   // up-counter, no auto-advance on rep steps
+            }
         }
-        WatchUi.requestUpdate();
+
+        // Redraw every tick while scrolling (for smooth motion), otherwise once a second.
+        if (mNeedsScroll) {
+            mScrollPx += SCROLL_SPEED;
+            WatchUi.requestUpdate();
+        } else if (secondBoundary) {
+            WatchUi.requestUpdate();
+        }
     }
 
     // --- navigation, called from the delegate ---
@@ -139,6 +160,7 @@ class ExerciseView extends WatchUi.View {
         var midW = w * 0.66;    // safe text width across the middle of the round screen
         var edgeW = w * 0.54;   // tighter width near the narrow top/bottom
         var s = mModel.current();
+        var scrolling = false;  // does any line need the marquee this frame?
 
         // Status row: step counter (left) and heart rate (right).
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
@@ -167,18 +189,32 @@ class ExerciseView extends WatchUi.View {
         }
         var nameBottom = nameTop + nameLines.size() * nameLh;
 
-        // Description: up to two lines, but only one when the name already used two, so
-        // the countdown below always has room.
-        var descMax = (nameLines.size() >= 2) ? 1 : 2;
-        var descLines = wrapLines(dc, s["d"], Graphics.FONT_XTINY, midW, descMax);
-        var descLh = dc.getFontHeight(Graphics.FONT_XTINY);
+        // Description. Long text scrolls instead of being cut off with an ellipsis.
+        // If the name already took two lines, the description gets a single scrolling
+        // line; otherwise a static first line plus a scrolling remainder.
+        var descFont = Graphics.FONT_XTINY;
+        var descLh = dc.getFontHeight(descFont);
         var descTop = nameBottom + 6;
+        var descLines;
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        for (var i = 0; i < descLines.size(); i += 1) {
-            dc.drawText(cx, descTop + i * descLh, Graphics.FONT_XTINY, descLines[i],
-                Graphics.TEXT_JUSTIFY_CENTER);
+        if (nameLines.size() >= 2) {
+            descLines = 1;
+            if (drawScrollingLine(dc, cx, descTop + descLh / 2, s["d"], descFont, midW)) {
+                scrolling = true;
+            }
+        } else {
+            var parts = splitFirstLine(dc, s["d"], descFont, midW);
+            descLines = parts[1].equals("") ? 1 : 2;
+            dc.drawText(cx, descTop + descLh / 2, descFont, parts[0],
+                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+            if (!parts[1].equals("")) {
+                if (drawScrollingLine(dc, cx, descTop + descLh + descLh / 2,
+                        parts[1], descFont, midW)) {
+                    scrolling = true;
+                }
+            }
         }
-        var descBottom = descTop + descLines.size() * descLh;
+        var descBottom = descTop + descLines * descLh;
 
         // Progress bar near the bottom; the big value is centred in the gap above it.
         var barW = (w * 0.60).toNumber();
@@ -194,7 +230,7 @@ class ExerciseView extends WatchUi.View {
         dc.setColor(Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
         dc.fillRectangle(barX, barY, (barW * prog).toNumber(), barH);
 
-        // Bottom line: PAUSE while paused, otherwise the next-exercise preview.
+        // Bottom line: PAUSE while paused, otherwise the next-exercise preview (scrolls).
         var infoY = h * 0.90;
         if (mPaused) {
             dc.setColor(Graphics.COLOR_ORANGE, Graphics.COLOR_TRANSPARENT);
@@ -204,12 +240,12 @@ class ExerciseView extends WatchUi.View {
             dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
             var nxt = mModel.peekNext();
             var label = (nxt != null) ? "next: " + nxt["n"] : "last exercise";
-            if (dc.getTextWidthInPixels(label, Graphics.FONT_XTINY) > edgeW) {
-                label = truncate(dc, label, Graphics.FONT_XTINY, edgeW);
+            if (drawScrollingLine(dc, cx, infoY, label, Graphics.FONT_XTINY, edgeW)) {
+                scrolling = true;
             }
-            dc.drawText(cx, infoY, Graphics.FONT_XTINY, label,
-                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
         }
+
+        mNeedsScroll = scrolling;
     }
 
     // Draws the countdown (time) or rep target, using the biggest numeric font that fits
@@ -262,7 +298,32 @@ class ExerciseView extends WatchUi.View {
         return m + ":" + (sec < 10 ? "0" + sec : "" + sec);
     }
 
-    // --- text fitting helpers ---
+    // --- text fitting / scrolling helpers ---
+
+    // Draws one line centred if it fits maxWidth, otherwise scrolls it horizontally within
+    // a clip window (the marquee wraps around with a gap). Returns true when it scrolled.
+    function drawScrollingLine(dc, cx, y, text, font, maxWidth) {
+        var tw = dc.getTextWidthInPixels(text, font);
+        if (tw <= maxWidth) {
+            dc.drawText(cx, y, font, text,
+                Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+            return false;
+        }
+        var lh = dc.getFontHeight(font);
+        var clipX = (cx - maxWidth / 2).toNumber();
+        var clipY = (y - lh / 2).toNumber();
+        var clipW = maxWidth.toNumber();
+        dc.setClip(clipX, clipY, clipW, lh);
+        var total = tw + SCROLL_GAP;
+        var off = mScrollPx % total;
+        var startX = clipX - off;
+        dc.drawText(startX, y, font, text,
+            Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
+        dc.drawText(startX + total, y, font, text,
+            Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
+        dc.clearClip();
+        return true;
+    }
 
     // Largest font whose single-line width fits maxWidth, else the smallest given.
     function fitFont(dc, text, fonts, maxWidth) {
@@ -272,6 +333,29 @@ class ExerciseView extends WatchUi.View {
             }
         }
         return fonts[fonts.size() - 1];
+    }
+
+    // Splits text into [firstLineThatFits, remainder] on word boundaries.
+    function splitFirstLine(dc, text, font, maxWidth) {
+        var words = splitWords(text);
+        var cur = "";
+        var i = 0;
+        while (i < words.size()) {
+            var trial = cur.equals("") ? words[i] : cur + " " + words[i];
+            if (dc.getTextWidthInPixels(trial, font) <= maxWidth) {
+                cur = trial;
+                i += 1;
+            } else {
+                break;
+            }
+        }
+        if (cur.equals("") && words.size() > 0) { cur = words[0]; i = 1; }  // long word
+        var rest = "";
+        while (i < words.size()) {
+            rest = rest.equals("") ? words[i] : rest + " " + words[i];
+            i += 1;
+        }
+        return [cur, rest];
     }
 
     function wrapLines(dc, text, font, maxWidth, maxLines) {
@@ -291,7 +375,6 @@ class ExerciseView extends WatchUi.View {
                 cur = "";
             }
         }
-        // Everything left goes on the final line, truncated with an ellipsis if needed.
         var rest = cur;
         while (i < words.size()) {
             rest = rest.equals("") ? words[i] : rest + " " + words[i];
