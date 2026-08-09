@@ -7,7 +7,7 @@ Monkey C **device app** that guides you through a daily mobility & stretching ro
 - **Guided routine**: steps through your exercises one by one with name, description and a large countdown.
 - **Two exercise types**: **time** steps count down and auto-advance at 0; **rep** steps show the target (e.g. `20 ×`) and wait for you to press **Select**.
 - **Editable in a CSV**: exercises, descriptions and durations live in `routine.csv` — no Monkey C needed.
-- **Activity recording**: records time, heart rate and calories as a `Daily-Mobility` flexibility-training activity that syncs to Strava through Garmin Connect.
+- **Activity recording**: records time, heart rate and calories as a flexibility-training activity named **Daily Mobility Routine** (instead of Garmin's default "Lunch Workout") that syncs to Strava through Garmin Connect.
 - **No GPS**: no positioning, no map data, no distance — nothing to wait for at the start.
 
 ---
@@ -95,7 +95,7 @@ After installing, the app appears in the watch's app list.
 
 ## Strava sync
 
-There is nothing to configure in the app. Link **Garmin Connect ↔ Strava** once in your Garmin Connect account settings; after that every recorded `Daily-Mobility` activity is pushed to Strava automatically. It shows up as a *Workout*. To make it appear as *Weight Training* instead, change `SUB_SPORT` in `source/SessionManager.mc` to `SUB_SPORT_STRENGTH_TRAINING`.
+There is nothing to configure in the app. Link **Garmin Connect ↔ Strava** once in your Garmin Connect account settings; after that every recorded activity is pushed to Strava automatically, named **Daily Mobility Routine** (change `SESSION_NAME` in `source/SessionManager.mc` to rename it). It shows up as a *Workout*; to make it appear as *Weight Training* instead, change `SUB_SPORT` in the same file to `SUB_SPORT_STRENGTH_TRAINING`.
 
 ---
 
