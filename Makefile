@@ -1,11 +1,12 @@
 # Daily-Mobility build automation.
 #
-#   make routine   CSV -> resources/routine.json
-#   make build     routine + compile the .prg
+#   make routine   both CSVs -> resources/routine.json + resources/routine_legs.json
+#   make build     routines + compile the .prg
 #   make sim       build + run in the Connect IQ simulator
 #   make deploy    build + copy the .prg to a connected watch
 #
-# Swap the active routine with e.g.  make build ROUTINE_CSV=routine-15min.csv
+# Both routines are built into the app and picked on the watch at start. Swap the
+# morning one with e.g.  make build ROUTINE_CSV=routine-15min.csv
 
 DEVICE       := fr255m
 APP_NAME     := Daily-Mobility
@@ -13,6 +14,8 @@ JUNGLE       := monkey.jungle
 KEY          := developer_key.der
 ROUTINE_CSV  ?= routine.csv
 ROUTINE_JSON := resources/routine.json
+LEGS_CSV     ?= routine-beine.csv
+LEGS_JSON    := resources/routine_legs.json
 BIN          := bin/$(APP_NAME).prg
 
 # Locate the SDK the Connect IQ SDK Manager marked as current.
@@ -26,11 +29,15 @@ CONNECTIQ := $(SDK_BIN)/connectiq
 
 all: build
 
-routine: $(ROUTINE_JSON)
+routine: $(ROUTINE_JSON) $(LEGS_JSON)
 
-# Regenerate whenever the CSV or the generator changes. .PHONY-free so it caches.
+# Regenerate whenever a CSV or the generator changes. .PHONY-free so it caches.
+# The third argument is the name the routine selection screen shows.
 $(ROUTINE_JSON): $(ROUTINE_CSV) tools/build_routine.py
-	python3 tools/build_routine.py $(ROUTINE_CSV) $(ROUTINE_JSON)
+	python3 tools/build_routine.py $(ROUTINE_CSV) $(ROUTINE_JSON) "Mobility & Kraft"
+
+$(LEGS_JSON): $(LEGS_CSV) tools/build_routine.py
+	python3 tools/build_routine.py $(LEGS_CSV) $(LEGS_JSON) "Beine"
 
 key: $(KEY)
 
@@ -62,4 +69,4 @@ deploy: build
 	fi
 
 clean:
-	rm -rf bin $(ROUTINE_JSON)
+	rm -rf bin $(ROUTINE_JSON) $(LEGS_JSON)

@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Turn routine.csv into resources/routine.json.
+"""Turn a routine CSV into a JSON resource.
 
-Connect IQ apps cannot read arbitrary files from the watch at runtime, so the
-routine is compiled into the .prg as a JSON resource. Edit routine.csv, run this
-(via `make routine` / `make build`) and the change ends up in the app.
+    build_routine.py <csv> <json> [display name]
+
+Connect IQ apps cannot read arbitrary files from the watch at runtime, so every
+routine is compiled into the .prg as a JSON resource. Edit the CSV, run this
+(via `make routine` / `make build`) and the change ends up in the app. The app
+ships two routines; both use this same generator, only with different arguments.
+The display name is the title the selection screen shows for the routine.
 
 CSV format (semicolon-separated, because the descriptions are full of commas):
 
@@ -21,7 +25,7 @@ import json
 import re
 import sys
 
-TITLE = "Daily-Mobility"
+DEFAULT_TITLE = "Daily-Mobility"
 DEFAULT_TIME = 60           # seconds, used when a time step leaves value empty
 SECONDS_PER_REP = 3         # only for the duration estimate
 
@@ -117,19 +121,20 @@ def estimate_seconds(steps):
 def main():
     csv_path = sys.argv[1] if len(sys.argv) > 1 else "routine.csv"
     out_path = sys.argv[2] if len(sys.argv) > 2 else "resources/routine.json"
+    title = sys.argv[3] if len(sys.argv) > 3 else DEFAULT_TITLE
 
     steps, warnings = build(csv_path)
 
     with open(out_path, "w", encoding="utf-8") as f:
-        json.dump({"title": TITLE, "steps": steps}, f, ensure_ascii=False, indent=2)
+        json.dump({"title": title, "steps": steps}, f, ensure_ascii=False, indent=2)
         f.write("\n")
 
     for w in warnings:
         sys.stderr.write("Warning, {}\n".format(w))
 
     total = estimate_seconds(steps)
-    print("{}: {} exercises, estimated {}:{:02d} min -> {}".format(
-        csv_path, len(steps), total // 60, total % 60, out_path))
+    print("{} ({}): {} exercises, estimated {}:{:02d} min -> {}".format(
+        csv_path, title, len(steps), total // 60, total % 60, out_path))
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 <resources>
-    <!-- Generated from routine.csv by tools/build_routine.py (make routine). -->
+    <!-- Generated from the routine CSVs by tools/build_routine.py (make routine). -->
     <jsonData id="routineData" filename="routine.json" />
+    <jsonData id="routineLegsData" filename="routine_legs.json" />
 </resources>
