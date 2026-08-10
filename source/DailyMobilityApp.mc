@@ -3,6 +3,7 @@ using Toybox.WatchUi;
 
 // App entry point. Owns the routine model and the activity-recording session so
 // both survive view changes and can be reached from any delegate via getApp().
+// The model is only created once the routine has been picked on the start screen.
 class DailyMobilityApp extends Application.AppBase {
 
     var model;
@@ -13,7 +14,6 @@ class DailyMobilityApp extends Application.AppBase {
     }
 
     function onStart(state) {
-        model = new RoutineModel();
         sessionMgr = new SessionManager();
     }
 
@@ -25,7 +25,8 @@ class DailyMobilityApp extends Application.AppBase {
     }
 
     function getInitialView() {
-        return [new StartView(model), new StartDelegate(model)];
+        var view = new RoutineSelectView();
+        return [view, new RoutineSelectDelegate(view)];
     }
 }
 
