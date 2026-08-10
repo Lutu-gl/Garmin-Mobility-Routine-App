@@ -10,6 +10,9 @@ module RoutineCatalog {
     const MOBILITY = 0;
     const LEGS = 1;
 
+    // Application.Storage key holding the index of the routine that ran last.
+    const LAST_KEY = "lastRoutine";
+
     function all() {
         return [
             { :res => Rez.JsonData.routineData,     :session => "Daily-Mobility" },

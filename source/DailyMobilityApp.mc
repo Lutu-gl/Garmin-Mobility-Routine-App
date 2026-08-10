@@ -25,8 +25,7 @@ class DailyMobilityApp extends Application.AppBase {
     }
 
     function getInitialView() {
-        var view = new RoutineSelectView();
-        return [view, new RoutineSelectDelegate(view)];
+        return [new RoutineSelectMenu(), new RoutineSelectMenuDelegate()];
     }
 }
 

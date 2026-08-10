@@ -4,7 +4,7 @@ Monkey C **device app** that guides you through a daily mobility & stretching ro
 
 ## Features
 
-- **Two routines, picked on the watch**: the app starts on a selection screen — **Mobility & Kraft** for the morning, **Beine** for leg day — with the exercise count and estimated duration of the highlighted one. The last pick is preselected next time.
+- **Two routines, picked on the watch**: the app starts on a selection menu — **Mobility & Kraft** for the morning, **Beine** for leg day — each with its exercise count and estimated duration. The last pick is preselected next time.
 - **Guided routine**: steps through your exercises one by one with name, description and a large countdown.
 - **Two exercise types**: **time** steps count down and auto-advance at 0; **rep** steps show the target (e.g. `20 ×`) and wait for you to press **Select**.
 - **Editable in a CSV**: exercises, descriptions and durations live in `routine.csv` and `routine-beine.csv` — no Monkey C needed.
@@ -125,7 +125,7 @@ daily-mobility/
     ├── RoutineCatalog.mc       # the selectable routines: resource + activity name
     ├── RoutineModel.mc         # exercise list, index, progress
     ├── SessionManager.mc       # activity recording (sport mapping)
-    ├── RoutineSelectView.mc    # start screen: pick the routine
+    ├── RoutineSelectMenu.mc    # start screen: pick the routine
     ├── ExerciseView.mc         # exercise screen: countdown, reps, pause, HR
     ├── ExerciseDelegate.mc     # button handling + finish menu
     └── SummaryView.mc          # end summary + save
@@ -146,9 +146,10 @@ No `Positioning` (no GPS search on start) and no `Communications` (no backend).
 
 ## Button mapping (Forerunner 255 Music)
 
-On the selection screen:
+On the selection menu:
 
-- **Up / Down** – switch between the routines.
+- **Down** – next routine; it wraps around, so both are reachable with this button alone.
+- **Up** – previous routine.
 - **Select** – start the highlighted routine.
 - **Back** – leave the app.
 
@@ -161,7 +162,8 @@ During a workout:
 
 ## Technical notes
 
-- **View–Delegate pattern**: `RoutineSelectView`/`RoutineSelectDelegate`, `ExerciseView`/`ExerciseDelegate`, `SummaryView`/`SummaryDelegate`.
+- **View–Delegate pattern**: `RoutineSelectMenu`/`RoutineSelectMenuDelegate`, `ExerciseView`/`ExerciseDelegate`, `SummaryView`/`SummaryDelegate`.
+- **The routine picker is a `Menu2`**, not a drawn view: on the app's first screen a short press of **Up** never reaches the app's own delegate (`onKey`, `onPreviousPage` and `onMenu` all stay silent), so a hand-drawn list could only be moved with **Down**. A system menu gets its scrolling from the system and behaves like the rest of the watch.
 - **Timer**: `Timer.Timer` every 1000 ms with `WatchUi.requestUpdate()`; stopped in `onHide` and restarted in `onShow` so it never runs in the background.
 - **Routines as resources**: Connect IQ apps cannot read files from the watch at runtime, so both CSVs are compiled into the `.prg` as JSON resources at build time. The selection screen reads name, count and duration from them and only keeps the routine you pick.
 - **Last pick**: stored in `Application.Storage` under `lastRoutine`.
