@@ -6,6 +6,7 @@ Monkey C **device app** that guides you through a daily mobility & stretching ro
 
 - **Two routines, picked on the watch**: the app starts on a selection menu — **Mobility & Kraft** for the morning, **Beine** for leg day — each with its exercise count and estimated duration. The last pick is preselected next time.
 - **Guided routine**: steps through your exercises one by one with name, description and a large countdown.
+- **5 seconds to reposition**: every exercise opens with a short countdown that names what is coming and whether it wants a hold or reps, so the timer does not start while you are still walking to the wall. **Select** skips it.
 - **Two exercise types**: **time** steps count down and auto-advance at 0; **rep** steps show the target (e.g. `20 ×`) and wait for you to press **Select**.
 - **Editable in a CSV**: exercises, descriptions and durations live in `routine.csv` and `routine-beine.csv` — no Monkey C needed.
 - **Activity recording**: records time, heart rate and calories as a strength-training activity named after the routine you picked — **Daily-Mobility** or **Daily-Legs**, instead of Garmin's default "Lunch Workout" — that syncs to Strava through Garmin Connect.
@@ -42,7 +43,9 @@ After editing, rebuild and redeploy:
 make deploy
 ```
 
-`tools/build_routine.py` validates each CSV (it names the offending line on any error) and prints the estimated total duration, so you can see whether you are landing near your target time. Rep exercises are estimated at 3 s per rep, which ignores the time you take between sets.
+`tools/build_routine.py` validates each CSV (it names the offending line on any error) and prints the estimated total duration, so you can see whether you are landing near your target time. The estimate counts a time step as its duration, a rep exercise at 3 s per rep, and adds the 5-second transition of every step; it still ignores the rest you take between hard sets, so the real workout runs a few minutes longer.
+
+The transition length is `REST_SECONDS` in `source/ExerciseView.mc`. Change it there and in `TRANSITION_SECONDS` in `tools/build_routine.py` plus `RoutineModel.estimatedSeconds()`, otherwise the displayed duration drifts from reality.
 
 ---
 
@@ -155,7 +158,7 @@ On the selection menu:
 
 During a workout:
 
-- **Select** – on a time step: **pause / resume**; on a rep step: **finish the exercise and continue**.
+- **Select** – during the 5-second transition: start the exercise now; on a time step: **pause / resume**; on a rep step: **finish the exercise and continue**.
 - **Down** – next exercise (also acts as *skip*).
 - **Up** – previous exercise.
 - **Back** – finish menu: **Save & Finish**, **Discard** or **Cancel**.
@@ -164,7 +167,8 @@ During a workout:
 
 - **View–Delegate pattern**: `RoutineSelectMenu`/`RoutineSelectMenuDelegate`, `ExerciseView`/`ExerciseDelegate`, `SummaryView`/`SummaryDelegate`.
 - **The routine picker is a `Menu2`**, not a drawn view: on the app's first screen a short press of **Up** never reaches the app's own delegate (`onKey`, `onPreviousPage` and `onMenu` all stay silent), so a hand-drawn list could only be moved with **Down**. A system menu gets its scrolling from the system and behaves like the rest of the watch.
-- **Timer**: `Timer.Timer` every 1000 ms with `WatchUi.requestUpdate()`; stopped in `onHide` and restarted in `onShow` so it never runs in the background.
+- **Timer**: one `Timer.Timer` every 100 ms drives the second-by-second countdown, the transition countdown and the text marquee; stopped in `onHide` and restarted in `onShow` so it never runs in the background.
+- **Two phases per step**: `ExerciseView` runs each step as transition (`mResting`) then exercise. Both auto-advance and manual navigation go through `loadStep()`, so the transition always appears.
 - **Routines as resources**: Connect IQ apps cannot read files from the watch at runtime, so both CSVs are compiled into the `.prg` as JSON resources at build time. The selection screen reads name, count and duration from them and only keeps the routine you pick.
 - **Last pick**: stored in `Application.Storage` under `lastRoutine`.
 - **Heart rate**: `Activity.getActivityInfo().currentHeartRate`, shown as `--` until the sensor is ready.

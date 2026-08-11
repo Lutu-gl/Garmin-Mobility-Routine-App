@@ -48,9 +48,10 @@ class RoutineModel {
         return false;
     }
 
-    // Estimated total seconds; rep-based steps counted at 3 s per rep.
+    // Estimated total seconds: rep-based steps counted at 3 s per rep, plus the transition
+    // countdown that opens every step. Keep in sync with tools/build_routine.py.
     function estimatedSeconds() {
-        var total = 0;
+        var total = steps.size() * 5;
         for (var i = 0; i < steps.size(); i += 1) {
             var s = steps[i];
             if (s["t"] == 0) { total += s["v"]; }

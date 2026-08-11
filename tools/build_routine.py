@@ -28,6 +28,7 @@ import sys
 DEFAULT_TITLE = "Daily-Mobility"
 DEFAULT_TIME = 60           # seconds, used when a time step leaves value empty
 SECONDS_PER_REP = 3         # only for the duration estimate
+TRANSITION_SECONDS = 5      # countdown before every step; mirrors ExerciseView.REST_SECONDS
 
 TIME_RE = re.compile(r"^(\d+):([0-5]\d)$")
 
@@ -112,7 +113,7 @@ def build(csv_path):
 
 
 def estimate_seconds(steps):
-    total = 0
+    total = len(steps) * TRANSITION_SECONDS
     for s in steps:
         total += s["v"] if s["t"] == 0 else s["v"] * SECONDS_PER_REP
     return total
