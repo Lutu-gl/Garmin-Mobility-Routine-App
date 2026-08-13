@@ -2,4 +2,6 @@
     <!-- Generated from the routine CSVs by tools/build_routine.py (make routine). -->
     <jsonData id="routineData" filename="routine.json" />
     <jsonData id="routineLegsData" filename="routine_legs.json" />
+    <jsonData id="routineTravelData" filename="routine_travel.json" />
+    <jsonData id="routineShortData" filename="routine_short.json" />
 </resources>

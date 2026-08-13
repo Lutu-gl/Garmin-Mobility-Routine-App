@@ -3,4 +3,6 @@ developer_key.pem
 developer_key.der
 resources/routine.json
 resources/routine_legs.json
+resources/routine_travel.json
+resources/routine_short.json
 .DS_Store
